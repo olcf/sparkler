@@ -1,0 +1,47 @@
+#------------------------------------------------------------------------------
+
+USE_GPU = YES
+
+ifeq ($(USE_GPU),YES)
+
+  CUDA_ROOT = $(OLCF_CUDA_ROOT)
+  CUDA_TARGET = x86_64-linux
+  MPI_ROOT = $(OLCF_OPENMPI_ROOT)
+
+  CC = nvcc
+  CFLAGS = -I$(MPI_ROOT)/include -DUSE_GPU -std=c++11
+  SRC = main.cu
+  OBJ = main.o
+
+  LD = $(MPI_ROOT)/bin/mpiCC
+  LDFLAGS = -L$(CUDA_ROOT)/targets/$(CUDA_TARGET)/lib \
+            -Wl,-rpath=$(CUDA_ROOT)/targets/$(CUDA_TARGET)/lib \
+            -Wl,-rpath=$(CUDA_ROOT)/lib64 \
+            -lcublas -lcudart
+  EXEC = exec.gpu
+
+else
+
+  MPI_ROOT = $(OLCF_OPENMPI_ROOT)
+  OPENBLAS_ROOT = $(OLCF_OPENBLAS_ROOT)
+
+  CC = $(MPI_ROOT)/bin/mpiCC
+  CFLAGS = -std=c++11 -I$(OPENBLAS_ROOT)/include -include cblas.h
+  SRC = main.cc
+  OBJ = main.o
+
+  LD = $(MPI_ROOT)/bin/mpiCC
+
+  LDFLAGS = -L$(OPENBLAS_ROOT)/lib -Wl,-rpath,$(OPENBLAS_ROOT)/lib -lopenblas
+  EXEC = exec.cpu
+
+endif
+
+all:
+	$(CC) -o $(OBJ) -c $(SRC) $(CFLAGS)
+	$(LD) -o $(EXEC) $(OBJ) $(LDFLAGS)
+
+distclean:
+	rm -f exec.gpu exec.cpu $(OBJ)
+
+#------------------------------------------------------------------------------
