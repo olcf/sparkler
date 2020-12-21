@@ -8,6 +8,8 @@ C = A^T A for small integer elements of the matrix A.
 This operation mimics the matrix product operation used to compute the
 Custom Corellation Coefficient (CCC) in the CoMet computational genomics code.
 
+Sparkler is licensed under the CoMet license; see https://github.com/wdj/comet.
+
 ## Building
 
 The build requires MPI and make.  The default build requires CUDA 9.2 or
