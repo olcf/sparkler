@@ -75,6 +75,7 @@ double get_time() {
 /// GPU compute capability.
 
 int compute_capability() {
+#if READY
 #ifdef USE_GPU
   hipDeviceProp_t deviceProp;
   hipGetDeviceProperties(&deviceProp, 0); // Assume only one GPU per rank.
@@ -82,6 +83,10 @@ int compute_capability() {
 #else
   return 0;
 #endif
+#else
+    // Force us to use SGEMM.
+    return 0;
+#endif // READY
 }
 
 //-----------------------------------------------------------------------------
@@ -310,7 +315,7 @@ __host__ __device__ size_t nonzero_stride(const size_t& i) {
 
 #ifdef USE_GPU
 template<class Matrix_t>
-__global__ void set_input_matrix_kernel(Matrix_t& a,
+__global__ void set_input_matrix_kernel(
   size_t nr, size_t nc, size_t nru, typename Matrix_t::P* d,
   size_t base_vector_num, typename Matrix_t::P value) {
 
@@ -348,7 +353,12 @@ void set_input_matrix(Matrix_t& a, size_t base_vector_num,
   const int num_threadblocks = (a.nr() * a.nc() + threadblocksize - 1)
                                / threadblocksize;
 
-  hipLaunchKernelGGL(HIP_KERNEL_NAME(set_input_matrix_kernel<Matrix_t>), dim3(dim3(num_threadblocks)), dim3(dim3(threadblocksize)), 0, stream , a, a.nr(), a.nc(), a.nru(), a.d(), base_vector_num, value);
+  hipLaunchKernelGGL(set_input_matrix_kernel<Matrix_t>,
+          dim3(num_threadblocks),
+          dim3(threadblocksize),
+          0,
+          stream ,
+          a.nr(), a.nc(), a.nru(), a.d(), base_vector_num, value);
 #else
   for (size_t r=0; r<a.nr(); ++r) {
     const size_t stride = nonzero_stride(r + base_vector_num);
@@ -651,7 +661,14 @@ void perform_run(size_t num_vector, size_t num_field, int num_iterations) {
   // Finish.
 
   SAFE_CALL_GPUBLAS(hipblasDestroy(accelblas_handle));
-  SAFE_CALL_GPU(hipStreamDestroy(stream));
+#if READY
+  // The current HIPLZ implementation of this function fails.
+  // It seems to be checking OpenCL information about
+  // available streams/devices, not Level Zero, and doesn't
+  // find the stream it is looking for.
+  // TODO Re-enable this once the implementation is fixed.
+  // SAFE_CALL_GPU(hipStreamDestroy(stream));
+#endif // READY
 }
 
 //-----------------------------------------------------------------------------
