@@ -23,12 +23,8 @@ enum hipblasDatatype_t
 {
     HIPBLAS_R_16F = 150, /**< 16 bit floating point, real */
     HIPBLAS_R_32F = 151, /**< 32 bit floating point, real */
-    HIPBLAS_R_64F = 152, /**< 64 bit floating point, real */
     HIPBLAS_R_8I  = 160, /**<  8 bit signed integer, real */
-    HIPBLAS_R_8U  = 161, /**<  8 bit unsigned integer, real */
     HIPBLAS_R_32I = 162, /**< 32 bit signed integer, real */
-    HIPBLAS_R_32U = 163, /**< 32 bit unsigned integer, real */
-    HIPBLAS_R_16B = 168, /**< 16 bit bfloat, real */
 };
 
 enum hipblasGemmAlgo_t

@@ -155,5 +155,80 @@ SGEMM(Context* ctxt,
     }
 }
 
+// WARNING:  This implementation has the general API,
+// but only supports the combination of data types
+// needed for the Sparkler mini-app because MKL
+// doesn't have a drop-in replacement for GemmEx.
+// The closest option seems to be the gemm() C++
+// function.
+// For Sparkler we need:
+// * half-precision for A and B
+// * single-precision for the scalars, C, and the computation.
+// Happily, the MKL gemm() function is supposed to
+// support this configuration (though its interface
+// does not provide a way to control the precision
+// of the computation).
+// HipBLAS only defines one gemm algorithm selector,
+// and doesn't say what it is (only that it is default), so we
+// ignore that parameter.
+void
+GEMMEx(Context* context,
+        Operation transa,
+        Operation transb,
+        int         m,
+        int         n,
+        int         k,
+        const void* alpha,
+        const void* a,
+        Datatype    a_type,
+        int         lda,
+        const void* b,
+        Datatype    b_type,
+        int         ldb,
+        const void* beta,
+        void*       c,
+        Datatype    c_type,
+        int         ldc,
+        Datatype    compute_type,
+        GemmAlgorithm alg)
+{
+#if READY
+    if(ctxt != nullptr)
+    {
+        try
+        {
+            oneapi::mkl::blas::gemm(ctxt->queue,
+                                    ToMKLOp(transa),
+                                    ToMKLOp(transb),
+                                    m,
+                                    n,
+                                    k,
+                                    *alpha,
+                                    A,
+                                    ldA,
+                                    B,
+                                    ldB,
+                                    *beta,
+                                    C,
+                                    ldC);
+        }
+        catch(sycl::exception const& e)
+        {
+            std::cerr << "MKL SYCL exception: " << e.what() << std::endl;
+            throw;
+        }
+        catch(std::exception const& e)
+        {
+            std::cerr << "MKL exception: " << e.what() << std::endl;
+            throw;
+        }
+
+        // Catch any asynchronous exceptions before continuing.
+        ctxt->queue.wait_and_throw();
+    }
+#endif // READY
+}
+
+
 } // namespace GEMM
 

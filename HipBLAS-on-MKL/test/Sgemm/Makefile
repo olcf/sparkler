@@ -4,7 +4,7 @@
 CXX	= clang++
 LD = clang++-link
 
-CXXFLAGS = -g -O0 -I../../include -I${BOOST_ROOT}/include
+CXXFLAGS = -g -O0 -I../Common -I../../include -I${BOOST_ROOT}/include
 LDFLAGS = -g -O0 -L../../lib -L${BOOST_ROOT}/lib
 
 TARGET = sgemm_test

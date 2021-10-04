@@ -21,6 +21,35 @@ ToGEMMOp(hipblasOperation_t hop)
 }
 
 
+inline
+GEMM::Datatype
+ToGEMMType(hipblasDatatype_t dt)
+{
+    std::unordered_map<hipblasDatatype_t, GEMM::Datatype> map =
+    {
+        {HIPBLAS_R_8I, GEMM::Real8I},
+        {HIPBLAS_R_32I, GEMM::Real32I},
+        {HIPBLAS_R_16F, GEMM::Real16F},
+        {HIPBLAS_R_32F, GEMM::Real32F}
+    };
+
+    return map[dt];
+}
+
+
+inline
+GEMM::GemmAlgorithm
+ToGEMMAlg(hipblasGemmAlgo_t alg)
+{
+    std::unordered_map<hipblasGemmAlgo_t, GEMM::GemmAlgorithm> map =
+    {
+        {HIPBLAS_GEMM_DEFAULT, GEMM::Default}
+    };
+
+    return map[alg];
+}
+
+
 hipblasStatus_t
 hipblasCreate(hipblasHandle_t* handle)
 {
@@ -125,22 +154,92 @@ hipblasGemmEx(hipblasHandle_t    handle,
                      int                n,
                      int                k,
                      const void*        alpha,
-                     const void*        a,
-                     hipblasDatatype_t  a_type,
-                     int                lda,
-                     const void*        b,
-                     hipblasDatatype_t  b_type,
-                     int                ldb,
+                     const void*        A,
+                     hipblasDatatype_t  AType,
+                     int                ldA,
+                     const void*        B,
+                     hipblasDatatype_t  BType,
+                     int                ldB,
                      const void*        beta,
-                     void*              c,
-                     hipblasDatatype_t  c_type,
-                     int                ldc,
-                     hipblasDatatype_t  compute_type,
+                     void*              C,
+                     hipblasDatatype_t  CType,
+                     int                ldC,
+                     hipblasDatatype_t  ComputeType,
                      hipblasGemmAlgo_t  algo)
 {
     hipblasStatus_t ret = HIPBLAS_STATUS_SUCCESS;
     if(handle != nullptr)
     {
+        GEMM::Context* ctxt = static_cast<GEMM::Context*>(handle);
+
+        try
+        {
+            GEMM::GEMMEx(ctxt,
+                            ToGEMMOp(transa),
+                            ToGEMMOp(transb),
+                            m,
+                            n,
+                            k,
+                            alpha,
+                            A,
+                            ToGEMMType(AType),
+                            ldA,
+                            B,
+                            ToGEMMType(BType),
+                            ldB,
+                            beta,
+                            C,
+                            ToGEMMType(CType),
+                            ldC,
+                            ToGEMMType(ComputeType),
+                            ToGEMMAlg(algo));
+        }
+        catch(std::exception const& e)
+        {
+            std::cerr << "GemmEx exception: " << e.what() << std::endl;
+            ret = HIPBLAS_STATUS_EXECUTION_FAILED;
+        }
+    }
+    else
+    {
+        ret = HIPBLAS_STATUS_HANDLE_IS_NULLPTR;
+    }
+    return ret;
+}
+
+
+#if READY
+    hipblasStatus_t ret = HIPBLAS_STATUS_SUCCESS;
+    if(handle != nullptr)
+    {
+        // Verify we were given the configuration we support.
+        if( (a_type == HIPBLAS_R_16F) and
+            (b_type == HIPBLAS_R_16F) and
+            (c_type == HIPBLAS_R_32F) and
+            (compute_type == HIPBLAS_R_32F) and
+            (algo == HIPBLAS_GEMM_DEFAULT) )
+        {
+            // We were given the configuration we support.
+            // Do the GEMM using our Gemm library.
+        }
+        else
+        {
+            ret = invalid type;
+        }
+    }
+    else
+    {
+        ret = HIPBLAS_STATUS_HANDLE_IS_NULLPTR;
+    }
+
+    return ret;
+}
+
+#endif // READY
+
+
+#if RREADY
+
 #if READY
         GEMM::Context* ctxt = static_cast<GEMM::Context*>(handle);
 
@@ -174,3 +273,4 @@ hipblasGemmEx(hipblasHandle_t    handle,
     return ret;
 }
 
+#endif //  RREADY
