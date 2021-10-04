@@ -1,0 +1,6 @@
+**/*.o
+**/*.so
+
+HipBLAS-on-MKL/test/Sgemm/sgemm_test
+
+
