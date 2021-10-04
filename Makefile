@@ -9,7 +9,7 @@ CXXFLAGS = -g -O0 -DUSE_GPU -IHipBLAS-on-MKL/include
 LDFLAGS = -g -O0 -LHipBLAS-on-MKL/lib
 
 TARGET = sparkler.gpu
-SRCS = main_hip.cpp
+SRCS = main.cpp
 OBJS = ${SRCS:.cpp=.o}
 LIBS = -lhipblas_mkl -lhiplz -lOpenCL -lze_loader -lmpi
 
