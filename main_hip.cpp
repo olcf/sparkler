@@ -75,7 +75,6 @@ double get_time() {
 /// GPU compute capability.
 
 int compute_capability() {
-#if READY
 #ifdef USE_GPU
   hipDeviceProp_t deviceProp;
   hipGetDeviceProperties(&deviceProp, 0); // Assume only one GPU per rank.
@@ -83,10 +82,6 @@ int compute_capability() {
 #else
   return 0;
 #endif
-#else
-    // Force us to use SGEMM.
-    return 0;
-#endif // READY
 }
 
 //-----------------------------------------------------------------------------
@@ -359,6 +354,7 @@ void set_input_matrix(Matrix_t& a, size_t base_vector_num,
           0,
           stream ,
           a.nr(), a.nc(), a.nru(), a.d(), base_vector_num, value);
+  SAFE_CALL_GPU(hipGetLastError());
 #else
   for (size_t r=0; r<a.nr(); ++r) {
     const size_t stride = nonzero_stride(r + base_vector_num);
@@ -667,7 +663,7 @@ void perform_run(size_t num_vector, size_t num_field, int num_iterations) {
   // available streams/devices, not Level Zero, and doesn't
   // find the stream it is looking for.
   // TODO Re-enable this once the implementation is fixed.
-  // SAFE_CALL_GPU(hipStreamDestroy(stream));
+  SAFE_CALL_GPU(hipStreamDestroy(stream));
 #endif // READY
 }
 
