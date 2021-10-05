@@ -172,26 +172,69 @@ SGEMM(Context* ctxt,
 // and doesn't say what it is (only that it is default), so we
 // ignore that parameter.
 void
-GEMMEx(Context* context,
+GEMMEx(Context* ctxt,
         Operation transa,
         Operation transb,
         int         m,
         int         n,
         int         k,
         const void* alpha,
-        const void* a,
-        Datatype    a_type,
-        int         lda,
-        const void* b,
-        Datatype    b_type,
-        int         ldb,
+        const void* A,
+        Datatype    AType,
+        int         ldA,
+        const void* B,
+        Datatype    BType,
+        int         ldB,
         const void* beta,
-        void*       c,
-        Datatype    c_type,
-        int         ldc,
-        Datatype    compute_type,
+        void*       C,
+        Datatype    CType,
+        int         ldC,
+        Datatype    ComputeType,
         GemmAlgorithm alg)
 {
+    if(ctxt != nullptr)
+    {
+        // Verify we were given the configuration we support.
+        // NOTE: these are temporary - we need to go to 16F/32F
+        if( (AType == Real32F) and
+            (BType == Real32F) and
+            (CType == Real32F) and
+            (ComputeType == Real32F) and
+            (alg == Default) )
+        {
+            try
+            {
+                oneapi::mkl::blas::gemm(ctxt->queue,
+                                        ToMKLOp(transa),
+                                        ToMKLOp(transb),
+                                        m,
+                                        n,
+                                        k,
+                                        *(float*)alpha,
+                                        (const float*)A,
+                                        ldA,
+                                        (const float*)B,
+                                        ldB,
+                                        *(float*)beta,
+                                        (float*)C,
+                                        ldC);
+            }
+            catch(sycl::exception const& e)
+            {
+                std::cerr << "MKL SYCL exception: " << e.what() << std::endl;
+                throw;
+            }
+            catch(std::exception const& e)
+            {
+                std::cerr << "MKL exception: " << e.what() << std::endl;
+                throw;
+            }
+
+            // Catch any asynchronous exceptions before continuing.
+            ctxt->queue.wait_and_throw();
+        }
+    }
+
 #if READY
     if(ctxt != nullptr)
     {
