@@ -2,5 +2,6 @@
 **/*.so
 
 HipBLAS-on-MKL/test/Sgemm/sgemm_test
+HipBLAS-on-MKL/test/SparklerGemmEx/gemmex_test
 
 
