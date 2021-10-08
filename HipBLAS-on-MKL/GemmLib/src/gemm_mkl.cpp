@@ -4,6 +4,8 @@
 #include "CL/sycl/backend/level_zero.hpp"
 #include "oneapi/mkl.hpp"
 
+
+
 namespace GEMM
 {
 
@@ -196,27 +198,37 @@ GEMMEx(Context* ctxt,
     {
         // Verify we were given the configuration we support.
         // NOTE: these are temporary - we need to go to 16F/32F
-        if( (AType == Real32F) and
-            (BType == Real32F) and
+        if( (AType == Real16F) and
+            (BType == Real16F) and
             (CType == Real32F) and
             (ComputeType == Real32F) and
             (alg == Default) )
         {
+            using HalfType = half;
+            using SingleType = float;
+
+
             try
             {
+                auto talpha = static_cast<const SingleType*>(alpha);
+                auto tbeta = static_cast<const SingleType*>(beta);
+                auto tA = static_cast<const HalfType*>(A);
+                auto tB = static_cast<const HalfType*>(B);
+                auto tC = static_cast<SingleType*>(C);
+
                 oneapi::mkl::blas::gemm(ctxt->queue,
                                         ToMKLOp(transa),
                                         ToMKLOp(transb),
                                         m,
                                         n,
                                         k,
-                                        *(float*)alpha,
-                                        (const float*)A,
+                                        *talpha,
+                                        tA,
                                         ldA,
-                                        (const float*)B,
+                                        tB,
                                         ldB,
-                                        *(float*)beta,
-                                        (float*)C,
+                                        *tbeta,
+                                        tC,
                                         ldC);
             }
             catch(sycl::exception const& e)

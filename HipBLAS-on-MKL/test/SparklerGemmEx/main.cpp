@@ -1,8 +1,11 @@
 #include <iostream>
+#include <iomanip>
 #include <string>
 #include <tuple>
 #include <cstring>  // for memset
 #include "hip/hip_runtime.h"
+#include "hip/hip_fp16.h"
+#include "hiplz_h2f.h"
 #include "hipblas.h"
 #include "HipStream.h"
 #include "HipblasContext.h"
@@ -11,12 +14,20 @@
 #include "CommandLine.h"
 
 // Types for the scalars, A, B, and C matrix elements.
-// using InType = half;  // where do I get this type?
-using InType = float;  // where do I get this type?
-hipblasDatatype_t hbInType = HIPBLAS_R_32F;
-using OutType = float;
-hipblasDatatype_t hbOutType = HIPBLAS_R_32F;
+using InType = _Float16;
+hipblasDatatype_t hipblasInType = HIPBLAS_R_16F;
 
+using OutType = float;
+hipblasDatatype_t hipblasOutType = HIPBLAS_R_32F;
+
+
+inline
+std::ostream&
+operator<<(std::ostream& os, _Float16 f16)
+{
+    os << (float)f16;
+    return os;
+}
 
 
 int
@@ -61,12 +72,8 @@ main(int argc, char* argv[])
             // We assume hipblasSgemm and MKL underneath expect column major order.
             // So leading dimension would be number of rows?
             int ldA = m;
-            int ldB = k;
+            int ldB = n;    // B is transposed.
             int ldC = m;
-
-            // We also have some scalars to define.
-            OutType alpha = 0.5;
-            OutType beta = 0.25;
 
             // Create the input matrices with known values.
             // Current test is:
@@ -82,6 +89,7 @@ main(int argc, char* argv[])
             }
             A.CopyHostToDeviceAsync(hipStream);
 
+            // B is tranposed.
             Matrix<InType> B(n, k);
             for(auto c = 0; c < n; ++c)
             {
@@ -102,6 +110,50 @@ main(int argc, char* argv[])
             // Wait for matrices to be copied to GPU.
             hipStream.Synchronize();
 
+#if READY
+#else
+            std::cout << "alpha: " << alpha 
+                    << "beta: " << beta
+                    << std::endl;
+            // Dump input matrices.
+            std::vector<InType> hostA(A.nItems());
+            auto Asize = A.size();
+            CHECK(hipMemcpy(hostA.data(), A.GetDeviceData(), Asize, hipMemcpyDeviceToHost));
+            std::cout << "A.nItems: " << A.nItems()
+                << ", A.size: " << Asize
+                << ", vals: ";
+            for(auto i = 0; i < A.nItems(); ++i)
+            {
+                std::cout << hostA[i] << ' ';
+            }
+            std::cout << std::endl;
+
+            std::vector<InType> hostB(B.nItems());
+            auto Bsize = B.size();
+            CHECK(hipMemcpy(hostB.data(), B.GetDeviceData(), Bsize, hipMemcpyDeviceToHost));
+            std::cout << "B.nItems: " << B.nItems()
+                << ", B.size: " << Bsize
+                << ", vals: ";
+            for(auto i = 0; i < B.nItems(); ++i)
+            {
+                std::cout << hostB[i] << ' ';
+            }
+            std::cout << std::endl;
+
+            std::vector<OutType> hostC(C.nItems());
+            auto Csize = C.size();
+            CHECK(hipMemcpy(hostC.data(), C.GetDeviceData(), Csize, hipMemcpyDeviceToHost));
+            std::cout << "C.nItems: " << C.nItems()
+                << ", C.size: " << Csize
+                << ", vals: ";
+            for(auto i = 0; i < C.nItems(); ++i)
+            {
+                std::cout << hostC[i] << ' ';
+            }
+            std::cout << std::endl;
+
+#endif // READY
+
             // Do the GEMM on the GPU.
             CHECK(hipblasGemmEx(hipblasContext.GetHandle(),
                                 HIPBLAS_OP_N,
@@ -111,22 +163,39 @@ main(int argc, char* argv[])
                                 k,
                                 &alpha,
                                 A.GetDeviceData(),
-                                hbInType,
+                                hipblasInType,
                                 ldA, 
                                 B.GetDeviceData(),
-                                hbInType,
+                                hipblasInType,
                                 ldB, 
                                 &beta,
                                 C.GetDeviceData(),
-                                hbOutType,
+                                hipblasOutType,
                                 ldC,
-                                hbOutType,
+                                hipblasOutType,
                                 HIPBLAS_GEMM_DEFAULT)); 
             hipStream.Synchronize();    // necessary?
 
             // Read C from device to host.
             C.CopyDeviceToHostAsync(hipStream);
             hipStream.Synchronize();
+
+#if READY
+#else
+            {
+                std::vector<OutType> hostC(C.nItems());
+                auto Csize = C.size();
+                CHECK(hipMemcpy(hostC.data(), C.GetDeviceData(), Csize, hipMemcpyDeviceToHost));
+                std::cout << "C.nItems: " << C.nItems()
+                    << ", C.size: " << Csize
+                    << ", vals: ";
+                for(auto i = 0; i < C.nItems(); ++i)
+                {
+                    std::cout << hostC[i] << ' ';
+                }
+                std::cout << std::endl;
+            }
+#endif // READY
 
             // Verify the GPU-computed results match the expected results.
             // Assumes column major ordering.
@@ -135,11 +204,12 @@ main(int argc, char* argv[])
             {
                 for(auto r = 0; r < m; r++)
                 {
-                    if(C.El(r, c) != (alpha + beta * r * c))
+                    auto expVal = (alpha * 1 + beta * r * c);
+                    if(C.El(r, c) != expVal)
                     {
                         ++nMismatches;
                         std::cout << "mismatch at: (" << r << ", " << c << ")"
-                            << " expected " << 1
+                            << " expected " << expVal
                             << ", got " << C.El(r,c)
                             << std::endl;
                     }
