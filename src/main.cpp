@@ -10,8 +10,6 @@
 
 #include "mpi.h"
 
-#include "SparklerConfig.h"
-
 #ifdef USE_GPU
 #include "hip/hip_runtime.h"
 #include "hipblas.h"
@@ -377,7 +375,7 @@ size_t elt_hash(size_t v, size_t r, size_t c) {
 template<typename TCS, typename GemmIn_t, typename GemmOut_t>
 void perform_gemm(hipblasHandle_t accelblas_handle, size_t m, size_t n, size_t k,
   Matrix<GemmIn_t>& tc_buf_left, Matrix<GemmIn_t>& tc_buf_right,
-  Matrix<GemmOut_t>& c_buf) {
+  Matrix<GemmOut_t>& c_buf, bool useMixedPrecision) {
 
 #ifdef USE_GPU
   // cuBLAS case.
@@ -385,7 +383,8 @@ void perform_gemm(hipblasHandle_t accelblas_handle, size_t m, size_t n, size_t k
   const GemmOut_t alpha = TCBufTypes<GemmOut_t>::one();
   const GemmOut_t beta = TCBufTypes<GemmOut_t>::zero();
 
-#if defined(USE_MIXED_PRECISION)
+  if (useMixedPrecision) {
+
     hipblasStatus_t status = hipblasGemmEx(
         accelblas_handle
       , HIPBLAS_OP_N, HIPBLAS_OP_T
@@ -411,7 +410,7 @@ void perform_gemm(hipblasHandle_t accelblas_handle, size_t m, size_t n, size_t k
     }
     ASSERT(status == HIPBLAS_STATUS_SUCCESS && "Failure in call to hipblasGemmEx.");
 
-#else // USE_MIXED_PRECISION
+  } else {
 
     hipblasStatus_t status = hipblasSgemm(
         accelblas_handle
@@ -425,7 +424,7 @@ void perform_gemm(hipblasHandle_t accelblas_handle, size_t m, size_t n, size_t k
     );
     ASSERT(status == HIPBLAS_STATUS_SUCCESS && "Failure in call to hipblasSgemm.");
 
-#endif // USE_MIXED_PRECISION
+  }
 
 #else
   // Standard (C)BLAS case.
@@ -492,6 +491,8 @@ void perform_run(size_t num_vector, size_t num_field, int num_iterations) {
   typedef TCSelector<TC_METHOD> TCS;
   typedef typename TCS::GemmIn_t GemmIn_t;
   typedef typename TCS::GemmOut_t GemmOut_t;
+
+  bool useMixedPrecision = (typeid(GemmIn_t) != typeid(GemmOut_t));
 
   const GemmIn_t zero = TCBufTypes<GemmIn_t>::zero();
   const GemmIn_t one = TCBufTypes<GemmIn_t>::one();
@@ -563,7 +564,7 @@ void perform_run(size_t num_vector, size_t num_field, int num_iterations) {
 
       if (is_step_active) {
         perform_gemm<TCS, GemmIn_t, GemmOut_t>(accelblas_handle, m, n, k,
-          tc_buf_left, tc_buf_right, c_buf);
+          tc_buf_left, tc_buf_right, c_buf, useMixedPrecision);
         flops_local += 2. * m * n * k;
       } // if is_step_active
 
@@ -674,6 +675,7 @@ int main(int argc, char** argv) {
 
   // Parse command line.
 
+  bool useMixedPrecision = true;
   size_t num_vector = 0;
   size_t num_field = 0;
   int num_iterations = 1;
@@ -694,21 +696,24 @@ int main(int argc, char** argv) {
       ASSERT(i < argc && 0 ? 0 : "Missing value for num_iterations.");
       num_iterations = atoi(argv[i]);
     }
+    if (strcmp(argv[i], "--single") == 0) {
+      useMixedPrecision = false;
+    }
   } // i
 
   ASSERT(num_vector >= 2);
   ASSERT(num_field >= 1);
   ASSERT(num_iterations >= 1);
 
-#if defined(USE_MIXED_PRECISION)
+  if (useMixedPrecision) {
     printf("Using mixed precision\n");
 #ifdef USE_GPU
     perform_run<TC_METHOD_FLOAT16>(num_vector, num_field, num_iterations);
 #endif
-#else
+  } else {
     printf("Using single precision\n");
     perform_run<TC_METHOD_FLOAT32>(num_vector, num_field, num_iterations);
-#endif // USE_MIXED_PRECISION
+  }
 
   // Finish.
 
