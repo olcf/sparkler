@@ -10,6 +10,8 @@
 
 #include "mpi.h"
 
+#include "SparklerConfig.h"
+
 #ifdef USE_GPU
 #include "hip/hip_runtime.h"
 #include "hipblas.h"
@@ -67,25 +69,6 @@ double get_time() {
   double result = ((double)tv.tv_sec + (double)tv.tv_usec * 1.e-6);
 
   return result;
-}
-
-//-----------------------------------------------------------------------------
-
-/// GPU compute capability.
-
-int compute_capability() {
-#if READY
-#ifdef USE_GPU
-  hipDeviceProp_t deviceProp;
-  hipGetDeviceProperties(&deviceProp, 0); // Assume only one GPU per rank.
-  return deviceProp.major * 100 + deviceProp.minor;
-#else
-  return 0;
-#endif
-#else
-    // force mixed precision
-    return 800;
-#endif // READY
 }
 
 //-----------------------------------------------------------------------------
@@ -402,8 +385,7 @@ void perform_gemm(hipblasHandle_t accelblas_handle, size_t m, size_t n, size_t k
   const GemmOut_t alpha = TCBufTypes<GemmOut_t>::one();
   const GemmOut_t beta = TCBufTypes<GemmOut_t>::zero();
 
-  if (compute_capability() >= 700) {
-
+#if defined(USE_MIXED_PRECISION)
     hipblasStatus_t status = hipblasGemmEx(
         accelblas_handle
       , HIPBLAS_OP_N, HIPBLAS_OP_T
@@ -429,7 +411,7 @@ void perform_gemm(hipblasHandle_t accelblas_handle, size_t m, size_t n, size_t k
     }
     ASSERT(status == HIPBLAS_STATUS_SUCCESS && "Failure in call to hipblasGemmEx.");
 
-  } else { // compute_capability
+#else // USE_MIXED_PRECISION
 
     hipblasStatus_t status = hipblasSgemm(
         accelblas_handle
@@ -443,7 +425,7 @@ void perform_gemm(hipblasHandle_t accelblas_handle, size_t m, size_t n, size_t k
     );
     ASSERT(status == HIPBLAS_STATUS_SUCCESS && "Failure in call to hipblasSgemm.");
 
-  } // compute_capability
+#endif // USE_MIXED_PRECISION
 
 #else
   // Standard (C)BLAS case.
@@ -718,13 +700,15 @@ int main(int argc, char** argv) {
   ASSERT(num_field >= 1);
   ASSERT(num_iterations >= 1);
 
-  if (compute_capability() >= 700) {
+#if defined(USE_MIXED_PRECISION)
+    printf("Using mixed precision\n");
 #ifdef USE_GPU
     perform_run<TC_METHOD_FLOAT16>(num_vector, num_field, num_iterations);
 #endif
-  } else {
+#else
+    printf("Using single precision\n");
     perform_run<TC_METHOD_FLOAT32>(num_vector, num_field, num_iterations);
-  }
+#endif // USE_MIXED_PRECISION
 
   // Finish.
 
