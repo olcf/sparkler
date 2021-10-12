@@ -104,19 +104,22 @@ enum {
 
 template<typename GemmIn_t> struct TCBufTypes;
 
-#if READY
+// As of mid-October 2021, the HIPLZ implementation does not handle
+// assignment to __half variables or __float2half() correctly on the host.
+// For example, "__half val = 1;" will result in the uint16_t bit pattern
+// for 1 (0x0001) rather than the _Float16 floating point value (0x03c0).
+// So we use separate host and device functions for these constants
+// until the HIPLZ implementation is fixed.
 template<> struct TCBufTypes<__half> {
-  static __host__ __device__ __half zero() {return __float2half(0.);}
-  static __host__ __device__ __half one() {return __float2half(1.);}
-  static __host__ __device__ __half two() {return __float2half(2.);}
+  static __host__  __half zero() {_Float16 f0 = 0; __half ret = *(reinterpret_cast<uint16_t*>(&f0)); return ret; }
+  static __device__ __half zero() {return __float2half(0.);}
+
+  static __host__  __half one() {_Float16 f1 = 1; __half ret = *(reinterpret_cast<uint16_t*>(&f1)); return ret; }
+  static __device__ __half one() {return __float2half(1.);}
+
+  static __host__ __half two() {_Float16 f2 = 2; __half ret = *(reinterpret_cast<uint16_t*>(&f2)); return ret; }
+  static __device__ __half two() {return __float2half(2.);}
 };
-#else
-template<> struct TCBufTypes<__half> {
-  static __host__ __device__ __half zero() {_Float16 f0 = 0; __half ret = *(reinterpret_cast<uint16_t*>(&f0)); return ret; }
-  static __host__ __device__ __half one() {_Float16 f1 = 1; __half ret = *(reinterpret_cast<uint16_t*>(&f1)); return ret; }
-  static __host__ __device__ __half two() {_Float16 f2 = 2; __half ret = *(reinterpret_cast<uint16_t*>(&f2)); return ret; }
-};
-#endif // READY
 
 //----------
 
