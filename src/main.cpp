@@ -12,7 +12,6 @@
 
 #ifdef USE_GPU
 #include "hip/hip_runtime.h"
-#include "hip/hip_runtime.h"
 #include "hipblas.h"
 #include "hip/hip_fp16.h"
 #else
@@ -75,6 +74,7 @@ double get_time() {
 /// GPU compute capability.
 
 int compute_capability() {
+#if READY
 #ifdef USE_GPU
   hipDeviceProp_t deviceProp;
   hipGetDeviceProperties(&deviceProp, 0); // Assume only one GPU per rank.
@@ -82,6 +82,10 @@ int compute_capability() {
 #else
   return 0;
 #endif
+#else
+    // force mixed precision
+    return 800;
+#endif // READY
 }
 
 //-----------------------------------------------------------------------------
@@ -100,11 +104,19 @@ enum {
 
 template<typename GemmIn_t> struct TCBufTypes;
 
+#if READY
 template<> struct TCBufTypes<__half> {
   static __host__ __device__ __half zero() {return __float2half(0.);}
   static __host__ __device__ __half one() {return __float2half(1.);}
   static __host__ __device__ __half two() {return __float2half(2.);}
 };
+#else
+template<> struct TCBufTypes<__half> {
+  static __host__ __device__ __half zero() {_Float16 f0 = 0; __half ret = *(reinterpret_cast<uint16_t*>(&f0)); return ret; }
+  static __host__ __device__ __half one() {_Float16 f1 = 1; __half ret = *(reinterpret_cast<uint16_t*>(&f1)); return ret; }
+  static __host__ __device__ __half two() {_Float16 f2 = 2; __half ret = *(reinterpret_cast<uint16_t*>(&f2)); return ret; }
+};
+#endif // READY
 
 //----------
 
@@ -496,8 +508,8 @@ void perform_run(size_t num_vector, size_t num_field, int num_iterations) {
   typedef typename TCS::GemmIn_t GemmIn_t;
   typedef typename TCS::GemmOut_t GemmOut_t;
 
-  const GemmOut_t zero = TCBufTypes<GemmOut_t>::zero();
-  const GemmOut_t one = TCBufTypes<GemmOut_t>::one();
+  const GemmIn_t zero = TCBufTypes<GemmIn_t>::zero();
+  const GemmIn_t one = TCBufTypes<GemmIn_t>::one();
 
   const size_t m = 2 * num_vector_local_up; // each vec gets 2 matrix rows.
   const size_t n = m;
