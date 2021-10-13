@@ -1,0 +1,9 @@
+#ifndef SPARKLER_CONFIG_H
+#define SPARKLER_CONFIG_H
+
+// Whether to use __half as the type for 16-bit floating point values.
+// If defined, we will use __half.
+// If not defined, we will use _Float16.
+#cmakedefine SPARKLER_USE_HALF_TYPE
+
+#endif // SPARKLER_CONFIG_H

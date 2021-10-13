@@ -10,10 +10,17 @@
 
 #include "mpi.h"
 
+#include "SparklerConfig.h"
+
 #ifdef USE_GPU
 #include "hip/hip_runtime.h"
 #include "hipblas.h"
 #include "hip/hip_fp16.h"
+#if !defined(SPARKLER_USE_HALF_TYPE)
+// We need support for converting _Float16 to float
+// that HIPLZ doesn't provide.
+#include "hiplz_h2f.h"
+#endif // !defined(SPARKLER_USE_HALF_TYPE)
 #else
 #define __host__
 #define __device__
@@ -102,6 +109,14 @@ template<> struct TCBufTypes<__half> {
   static __device__ __half two() {return __float2half(2.);}
 };
 
+// _Float16 is simpler.
+template<> struct TCBufTypes<_Float16> {
+  static __host__ __device__ _Float16 zero() {return 0;}
+  static __host__ __device__ _Float16 one() {return 1;}
+  static __host__ __device__ _Float16 two() {return 2;}
+};
+
+
 //----------
 
 template<> struct TCBufTypes<int8_t> {
@@ -139,8 +154,13 @@ template<> struct TCSelector<TC_METHOD_INT8> {
 template<> struct TCSelector<TC_METHOD_FLOAT16> {
   enum {TC_METHOD = TC_METHOD_FLOAT16};
   // types.
+#if defined(SPARKLER_USE_HALF_TYPE)
   typedef __half GemmIn_t;
+#else
+  typedef _Float16 GemmIn_t;
+#endif // defined(SPARKLER_USE_HALF_TYPE)
   typedef float GemmOut_t;
+  static constexpr bool usesMixedPrecision = true;
 #ifdef USE_GPU
   // type selector parameters.
   static hipblasDatatype_t __host__ __device__ gemm_type_in() {return HIPBLAS_R_16F;}
@@ -155,6 +175,7 @@ template<> struct TCSelector<TC_METHOD_FLOAT32> {
   // types.
   typedef float GemmIn_t;
   typedef float GemmOut_t;
+  static constexpr bool usesMixedPrecision = false;
 #ifdef USE_GPU
   // type selector parameters.
   static hipblasDatatype_t __host__ __device__ gemm_type_in() {return HIPBLAS_R_32F;}
@@ -375,7 +396,7 @@ size_t elt_hash(size_t v, size_t r, size_t c) {
 template<typename TCS, typename GemmIn_t, typename GemmOut_t>
 void perform_gemm(hipblasHandle_t accelblas_handle, size_t m, size_t n, size_t k,
   Matrix<GemmIn_t>& tc_buf_left, Matrix<GemmIn_t>& tc_buf_right,
-  Matrix<GemmOut_t>& c_buf, bool useMixedPrecision) {
+  Matrix<GemmOut_t>& c_buf) {
 
 #ifdef USE_GPU
   // cuBLAS case.
@@ -383,7 +404,7 @@ void perform_gemm(hipblasHandle_t accelblas_handle, size_t m, size_t n, size_t k
   const GemmOut_t alpha = TCBufTypes<GemmOut_t>::one();
   const GemmOut_t beta = TCBufTypes<GemmOut_t>::zero();
 
-  if (useMixedPrecision) {
+  if (TCS::usesMixedPrecision) {
 
     hipblasStatus_t status = hipblasGemmEx(
         accelblas_handle
@@ -492,8 +513,6 @@ void perform_run(size_t num_vector, size_t num_field, int num_iterations) {
   typedef typename TCS::GemmIn_t GemmIn_t;
   typedef typename TCS::GemmOut_t GemmOut_t;
 
-  bool useMixedPrecision = (typeid(GemmIn_t) != typeid(GemmOut_t));
-
   const GemmIn_t zero = TCBufTypes<GemmIn_t>::zero();
   const GemmIn_t one = TCBufTypes<GemmIn_t>::one();
 
@@ -564,7 +583,7 @@ void perform_run(size_t num_vector, size_t num_field, int num_iterations) {
 
       if (is_step_active) {
         perform_gemm<TCS, GemmIn_t, GemmOut_t>(accelblas_handle, m, n, k,
-          tc_buf_left, tc_buf_right, c_buf, useMixedPrecision);
+          tc_buf_left, tc_buf_right, c_buf);
         flops_local += 2. * m * n * k;
       } // if is_step_active
 
@@ -706,7 +725,18 @@ int main(int argc, char** argv) {
   ASSERT(num_iterations >= 1);
 
   if (useMixedPrecision) {
-    printf("Using mixed precision\n");
+    int myRank;
+    SAFE_CALL_MPI(MPI_Comm_rank(MPI_COMM_WORLD, &myRank));
+    if(myRank == 0) {
+      printf("Using mixed precision\n");
+
+#if defined(SPARKLER_USE_HALF_TYPE)
+      auto halfType = "__half";
+#else
+      auto halfType = "_Float16";
+#endif // defined(SPARKLER_USE_HALF_TYPE)
+      printf("Using %s for 16-bit floating point.\n", halfType);
+    }
 #ifdef USE_GPU
     perform_run<TC_METHOD_FLOAT16>(num_vector, num_field, num_iterations);
 #endif

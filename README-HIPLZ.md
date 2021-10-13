@@ -37,9 +37,11 @@ $ module load openmpi
 $ module unload -f cuda llvm
 ```
 
-Because it can be challenging to use a separate, custom linker with CMake, 
-you probably also want to make the HipBLAS-MKL project's `hiplz-clang++` wrapper
-available in your path.  Assuming HipBLAS-MKL is installed at `${HBM_ROOT}`:
+Because it can be challenging to use a custom linker with CMake that has
+to be invoked as a separate step, use the HipBLAS-MKL project's `hiplz-clang++`
+wrapper that determines if one is compiling or linking, and invokes the
+appropriate HIPLZ script.  Make sure `hiplz-clang++` is in your `PATH`.
+Assuming HipBLAS-MKL is installed at `${HBM_ROOT}`:
 
 ```bash
 $ cd ${HBM_ROOT}/bin
@@ -64,8 +66,12 @@ cmake \
 -DCMAKE_INSTALL_PREFIX=${SPARKLER_INST_DIR} \
 -DCMAKE_BUILD_TYPE=RelWithDebInfo \
 -DCMAKE_PREFIX_PATH=${HBM_ROOT}/lib/cmake \
+-DSPARKLER_USE_HALF_TYPE=ON \
 ${SPARKLER_SRC_DIR}
 ```
+
+The `SPARKLER_USE_HALF_TYPE` option indicates whether to use the `__half` type for
+16-bit floating point variables, or the `_Float16` type.  Set it `ON` to use `__half`.
 
 # Build and Install
 Once configured, from the build directory:
