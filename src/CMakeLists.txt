@@ -6,8 +6,6 @@ find_package(hipblas_mkl)
 # We only support building the GPU version.
 add_executable(sparkler
     main.cpp)
-target_include_directories(sparkler PUBLIC
-    ${CMAKE_CURRENT_BINARY_DIR})
 target_compile_definitions(sparkler PUBLIC USE_GPU)
 target_link_libraries(sparkler
     PUBLIC hipblas_mkl)
