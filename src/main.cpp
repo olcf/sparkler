@@ -16,11 +16,6 @@
 #include "hip/hip_runtime.h"
 #include "hipblas.h"
 #include "hip/hip_fp16.h"
-#if !defined(SPARKLER_USE_HALF_TYPE)
-// We need support for converting _Float16 to float
-// that HIPLZ doesn't provide.
-#include "hiplz_h2f.h"
-#endif // !defined(SPARKLER_USE_HALF_TYPE)
 #else
 #define __host__
 #define __device__
